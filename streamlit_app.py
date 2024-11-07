@@ -1,151 +1,105 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import plotly.express as px
+import plotly.graph_objects as go
 
-# Set the title and favicon that appear in the Browser's tab bar.
+# Set up Streamlit page
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title='Model Comparison Dashboard',
+    page_icon=':bar_chart:',
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+# Title and description
+st.title(':bar_chart: Used Cars Model Comparison')
+st.markdown("""
+#### MWS_WDM_S24  
+Supervisor: Dr. Bassel Alkhatib  
+Created by: Elias Dahdal (elias_335295) & Natalie Alkalaf (natalie_336924) 
+""")
+st.write("""
+This dashboard compares the performance of three different machine learning algorithms:
+- **Logistic Regression**: A linear model widely used for classification tasks.
+- **Decision Tree**: A model that makes predictions by splitting data into branches.
+- **Naive Bayes**: A probabilistic classifier based on Bayes' theorem.
+""")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# Initialize the comparison table data
+Comparing_Table = {
+    "Logistic Regression": {"Accuracy": 80.9, "Precision": 80.44, "Recall": 80.9, "F1 Score": 80.24},
+    "Decision Tree": {"Accuracy": 81.13, "Precision": 80.96, "Recall": 81.13, "F1 Score": 81.01},
+    "Naive Bayes": {"Accuracy": 37.21, "Precision": 76.55, "Recall": 37.21, "F1 Score": 41.16}
+}
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# Convert Comparing_Table to a DataFrame for easier plotting
+df_comparison = pd.DataFrame(Comparing_Table)
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# Sidebar Interactivity
+st.sidebar.subheader("Interactive Options")
+chart_type = st.sidebar.selectbox("Select Chart Type", ["Bar Chart", "Radar Chart", "Heatmap"])
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+# Allow users to set a threshold for model accuracy
+accuracy_threshold = st.sidebar.slider("Minimum Accuracy (%)", 0, 100, 50)
+highlighted_models = df_comparison.loc['Accuracy'] >= accuracy_threshold
+highlighted_text = ", ".join(df_comparison.columns[highlighted_models])
+st.sidebar.write(f"Models with Accuracy ≥ {accuracy_threshold}%: {highlighted_text if highlighted_text else 'None'}")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+# Allow users to select which metrics to display
+selected_metrics = st.sidebar.multiselect("Select Metrics to Display", options=df_comparison.index, default=df_comparison.index)
+filtered_df_comparison = df_comparison.loc[selected_metrics]
+
+
+# Display selected chart type based on user input
+if chart_type == "Bar Chart":
+    st.subheader("Bar Chart of Model Performance")
+    fig = px.bar(
+        filtered_df_comparison,
+        x=filtered_df_comparison.index,
+        y=filtered_df_comparison.columns,
+        title="Selected Model Performance Metrics",
+        labels={'x': "Metrics", 'value': "Percentage (%)", 'variable': "Model"}
     )
+    fig.update_layout(barmode='group')
+    st.plotly_chart(fig)
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+elif chart_type == "Radar Chart":
+    st.subheader("Radar Chart of Model Performance")
+    fig = go.Figure()
+    for model_name in filtered_df_comparison.columns:
+        fig.add_trace(go.Scatterpolar(
+            r=filtered_df_comparison[model_name].tolist(),
+            theta=filtered_df_comparison.index,
+            fill='toself',
+            name=model_name
+        ))
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100])
+        ),
+        title="Radar Chart of Selected Metrics",
+        showlegend=True
+    )
+    st.plotly_chart(fig)
 
-    return gdp_df
+elif chart_type == "Heatmap":
+    st.subheader("Heatmap of Model Performance")
+    fig = px.imshow(
+        filtered_df_comparison.values,
+        labels=dict(x="Model", y="Metric", color="Percentage (%)"),
+        x=filtered_df_comparison.columns,
+        y=filtered_df_comparison.index,
+        title="Heatmap of Selected Metrics",
+        color_continuous_scale=color_theme
+    )
+    st.plotly_chart(fig)
 
-gdp_df = get_gdp_data()
+# Explanations and Analysis
+st.subheader("Discussion and Analysis")
+st.write("""
+Based on the performance metrics:
+- **Decision Tree** is the top performer across all metrics.
+- **Logistic Regression** performs well but slightly below the Decision Tree.
+- **Naive Bayes** shows high Precision but struggles in other metrics due to its strong independence assumption.
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+### Conclusion
+The Decision Tree model is preferred for this dataset due to its balanced and high performance across metrics.
+""")
