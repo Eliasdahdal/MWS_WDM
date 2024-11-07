@@ -48,6 +48,9 @@ selected_metrics = st.sidebar.multiselect("Select Metrics to Display", options=d
 filtered_df_comparison = df_comparison.loc[selected_metrics]
 
 
+color_theme = st.sidebar.selectbox("Choose Color Theme", ["YlGnBu", "Viridis", "Cividis", "Plotly3"])
+
+
 # Display selected chart type based on user input
 if chart_type == "Bar Chart":
     st.subheader("Bar Chart of Model Performance")
